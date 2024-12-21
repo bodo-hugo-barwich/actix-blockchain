@@ -8,6 +8,10 @@ Blockchain Exercise demonstrating the _Proof of Work_ concept
 This service is an exercise to demonstrate the functionality of a cryptocurrency node
 as _HTTP API_.
 
+This combines blockchain concepts with web development technology producing a
+extremely fast crypto-currency implementation which shows off how _Actix_ can add
+elegance and speed to a crypto-currency.
+
 # MOTIVATION
 
 Translating the concepts seen in the blockchain course
@@ -48,3 +52,8 @@ the `Actor` trait of _Actix_ and `Future`s are used.
 
 The _Proof of Work_ block mining runs in a dedicated miner thread which keeps the
 API operative while a new block is mined.
+
+- Mutex
+
+The central data needs to be shared between threads since transaction are added through
+the HTTP API but also new blocks need to be mined in dedicated threads.
