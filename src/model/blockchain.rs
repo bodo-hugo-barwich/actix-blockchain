@@ -1,6 +1,6 @@
 /*
 * @author Bodo (Hugo) Barwich
-* @version 2024-11-28
+* @version 2024-12-30
 * @package Blockchain Exercise
 * @subpackage Blockchain Structures
 
@@ -10,21 +10,13 @@
 * Requirements:
 */
 
+use actix_web::web;
 use serde::{Deserialize, Serialize};
 use serde_json::Error;
 use sha256::digest;
-//use num::pow;
 use std::time::SystemTime;
 
-//==============================================================================
-// Structure Transaction Declaration
-
-#[derive(Debug, Default, Serialize, Deserialize)]
-pub struct Transaction {
-    pub sender: String,
-    pub receiver: String,
-    pub amount: f64,
-}
+use super::transaction::{MutexTransactionList, Transaction};
 
 //==============================================================================
 // Structure Block Declaration
@@ -44,32 +36,7 @@ pub struct Block {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Blockchain {
     pub chain: Vec<Block>,
-    pub transactions: Option<Vec<Transaction>>,
     pub nodes: Vec<String>,
-}
-
-//==============================================================================
-// Structure Transaction Implementation
-
-impl Transaction {
-    /*----------------------------------------------------------------------------
-     * Constructors
-     */
-
-    pub fn from_data(sender: String, receiver: String, amount: f64) -> Self {
-        Self {
-            sender: sender,
-            receiver: receiver,
-            amount: amount,
-        }
-    }
-
-    /*----------------------------------------------------------------------------
-     * Consultation Methods
-     */
-    pub fn is_valid(&self) -> bool {
-        !self.sender.is_empty() && !self.receiver.is_empty() && self.amount != 0f64
-    }
 }
 
 //==============================================================================
@@ -150,7 +117,7 @@ impl Block {
         digest(block_json)
     }
 
-    pub fn update_timestamp(&mut self, timestamp: Option<u32>) {
+    pub fn update_timestamp(&mut self, timestamp: Option<u32>) -> u32 {
         self.timestamp = match timestamp {
             Some(t) => t,
             None => match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
@@ -158,6 +125,8 @@ impl Block {
                 Err(_) => 0 as u32,
             },
         };
+
+        self.timestamp
     }
 }
 
@@ -182,7 +151,6 @@ impl Blockchain {
     pub fn new() -> Self {
         let blockchain = Self {
             chain: Vec::<Block>::new(),
-            transactions: None,
             nodes: Vec::<String>::new(),
         };
         // Generate Genesis Block
@@ -195,51 +163,21 @@ impl Blockchain {
      * Administration Methods
      */
 
-    /*  Realización de una transacción.
-        Arguments:
-            - sender: Persona que hace la transacción
-            - receiver: Persona que recibe la transacción
-            - amount: Cantidad de criptomonedas enviadas
-
-        Returns:
-            - Índice del último bloque más uno
-    */
-    pub fn add_transaction_from_data(&mut self, sender: &str, receiver: &str, amount: f64) -> u64 {
-        self.add_transaction(Transaction {
-            sender: sender.to_owned(),
-            receiver: receiver.to_owned(),
-            amount: amount,
-        })
-    }
-
-    pub fn add_transaction(&mut self, transaction: Transaction) -> u64 {
-        match &mut self.transactions {
-            Some(ref mut tx) => tx.push(transaction),
-            None => {
-                let mut tx = Vec::<Transaction>::new();
-
-                tx.push(transaction);
-
-                self.transactions = Some(tx);
-            }
-        }
-
-        self.get_last_block_index() + 1
-    }
-
-    /*    Creación de un nuevo bloque.
-
-          Arguments:
-            - proof: Nounce del bloque actual.
-            - previous_hash: Hash del bloque previo.
-
-          Returns:
-            - index: index del nuevo bloque creado.
-
-    */
-    pub fn build_block(&mut self, proof: u64, previous_hash: &str) -> u64 {
+    /// Build a new Block.
+    ///
+    /// # Parameters:
+    /// - `proof`: Nonce of this Block.
+    /// - `previous_hash`: Hash of the previous Block.
+    ///
+    pub fn build_block(
+        &mut self,
+        proof: u64,
+        previous_hash: &str,
+        transaction_mutex: web::Data<MutexTransactionList>,
+    ) -> u64 {
         let next_index = self.get_last_block_index() + 1;
-        let block = Block::build_block(next_index, proof, previous_hash, self.transactions.take());
+        let transactions = transaction_mutex.into_vec();
+        let block = Block::build_block(next_index, proof, previous_hash, Some(transactions));
 
         self.chain.push(block);
 
@@ -253,7 +191,7 @@ impl Blockchain {
           Returns:
             - new_proof: Devolución del nuevo nounce obtenido con PoW.
     */
-    pub fn proof_of_work(&mut self) -> u64 {
+    pub fn proof_of_work(&mut self, transaction_mutex: &web::Data<MutexTransactionList>) -> u64 {
         let last_block = self.get_last_block();
         let last_hash = match last_block {
             Some(b) => b.to_hash(),
@@ -264,20 +202,26 @@ impl Blockchain {
             None => 1,
         };
         let mut new_proof: u64 = 0;
+        let transactions = transaction_mutex.into_vec();
         let mut new_block = Block::build_block(
             next_index,
             new_proof,
             last_hash.as_str(),
-            self.transactions.take(),
+            Some(transactions),
         );
         let mut proof_matches = false;
+        let mut last_timestamp = new_block.timestamp;
 
         while !proof_matches {
             new_block.proof = new_proof;
-            new_block.update_timestamp(None);
+            if new_block.update_timestamp(None) != last_timestamp {
+                last_timestamp = new_block.timestamp;
 
-            if let Some(tx) = &mut self.transactions {
-                tx.drain(..).for_each(|t| new_block.transactions.push(t));
+                if transaction_mutex.get_count() != 0 {
+                    let mut tx = transaction_mutex.into_vec();
+
+                    tx.drain(..).for_each(|t| new_block.transactions.push(t));
+                }
             }
 
             let block_hash = new_block.to_hash();

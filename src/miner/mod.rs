@@ -22,6 +22,7 @@ use rand::distributions::{Distribution, Uniform};
 use std::{thread, time};
 
 use crate::model::blockchain::Blockchain;
+use crate::model::transaction::MutexTransactionList;
 
 //==============================================================================
 // Structure MiningMessage Declaration
@@ -52,6 +53,7 @@ pub struct MiningError {
 // Define actor
 pub struct MiningWorker {
     blockchain_mutex: web::Data<Mutex<Blockchain>>,
+    transaction_mutex: web::Data<MutexTransactionList>,
 }
 
 //==============================================================================
@@ -75,12 +77,17 @@ impl MiningWorker {
     pub fn new() -> Self {
         Self {
             blockchain_mutex: web::Data::new(Mutex::new(Blockchain::new())),
+            transaction_mutex: web::Data::new(MutexTransactionList::new()),
         }
     }
 
-    pub fn with_data(data_mutex: web::Data<Mutex<Blockchain>>) -> Self {
+    pub fn with_data(
+        blockchain_mutex: web::Data<Mutex<Blockchain>>,
+        transaction_mutex: web::Data<MutexTransactionList>,
+    ) -> Self {
         Self {
-            blockchain_mutex: data_mutex,
+            blockchain_mutex: blockchain_mutex,
+            transaction_mutex: transaction_mutex,
         }
     }
 
@@ -88,8 +95,13 @@ impl MiningWorker {
      * Administration Methods
      */
 
-    pub fn set_data(&mut self, data_mutex: web::Data<Mutex<Blockchain>>) {
-        self.blockchain_mutex = data_mutex;
+    pub fn set_data(
+        &mut self,
+        blockchain_mutex: web::Data<Mutex<Blockchain>>,
+        transaction_mutex: web::Data<MutexTransactionList>,
+    ) {
+        self.blockchain_mutex = blockchain_mutex;
+        self.transaction_mutex = transaction_mutex;
     }
 
     pub fn mine_block(&mut self) -> Result<u64, MiningError> {
@@ -99,11 +111,18 @@ impl MiningWorker {
 
                 let blockchain = guard.deref_mut();
 
-                let proof = blockchain.proof_of_work();
+                let proof = blockchain.proof_of_work(&self.transaction_mutex);
 
-                let _ = blockchain.add_transaction_from_data("blockchain", "Miner", 10f64);
-
-                Ok(proof)
+                match self
+                    .transaction_mutex
+                    .add_transaction_from_data("blockchain", "Miner", 10f64)
+                {
+                    Ok(()) => Ok(proof),
+                    Err(e) => Err(MiningError {
+                        status: "failed".to_owned(),
+                        report: format!("Mining: Reward Grant failed! Message: {:?}", e),
+                    }),
+                }
             }
             Err(e) => Err(MiningError {
                 status: "failed".to_owned(),
@@ -122,6 +141,20 @@ impl MiningWorker {
                 let blockchain = guard.deref();
 
                 blockchain.chain.len()
+            }
+            Err(e) => {
+                eprintln!("Blockchain: Mutex Lock failed! Message: {:?}", e);
+                0
+            }
+        }
+    }
+
+    pub fn get_last_block_index(&self) -> u64 {
+        match self.blockchain_mutex.lock() {
+            Ok(guard) => {
+                let blockchain = guard.deref();
+
+                blockchain.get_last_block_index()
             }
             Err(e) => {
                 eprintln!("Blockchain: Mutex Lock failed! Message: {:?}", e);
