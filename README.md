@@ -4,13 +4,13 @@
 
 Blockchain Exercise demonstrating the _Proof of Work_ concept.
 
-This simulates a **Cryptocurrency Node** in simplified version as to limit the scope 
-of the project.
-
 # DESCRIPTION
 
 This service is an exercise to demonstrate the functionality of a cryptocurrency node
 as _HTTP API_.
+
+This simulates a **crypto-currency node** in simplified version as to limit the scope
+of the project.
 
 This combines blockchain concepts with web development technology producing a
 extremely fast crypto-currency implementation which shows off how _Actix_ can add
