@@ -27,14 +27,14 @@ use actix_web::middleware::Logger;
 use actix_web::{error, web, App, Error, HttpResponse, HttpServer};
 use futures_util::StreamExt;
 use std::env;
-use std::ops::DerefMut;
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 
 use config::AppConfig;
 use miner::{MinerLink, MiningWorker};
-use model::blockchain::{Blockchain, Transaction};
+use model::blockchain::Blockchain;
+use model::transaction::{MutexTransactionList, Transaction};
 
 const MAX_SIZE: usize = 262_144; // max payload size is 256k
 
@@ -63,7 +63,7 @@ pub async fn dispatch_home_page() -> HttpResponse {
 
 /// Handler to add a Transaction to the Blockchain
 pub async fn add_transaction(
-    blockchain_mutex: web::Data<Mutex<Blockchain>>,
+    transaction_mutex: web::Data<MutexTransactionList>,
     mut payload: web::Payload,
 ) -> Result<HttpResponse, Error> {
     // payload is a stream of Bytes objects
@@ -86,28 +86,39 @@ pub async fn add_transaction(
 
             if !request_transaction.is_valid() {
                 eprintln!("POST Transaction: Transaction is invalid");
+
                 return Err(error::ErrorBadRequest("Transaction is invalid"));
             }
 
-            let mut blockchain_guard = blockchain_mutex.lock().unwrap();
-            let blockchain = blockchain_guard.deref_mut();
+            match transaction_mutex.add_transaction(request_transaction) {
+                Ok(_) => {
+                    println!("Transactions: {:?}", transaction_mutex);
 
-            let next_index = blockchain.add_transaction(request_transaction);
+                    //------------------------
+                    // Success Notfication
 
-            println!("Blockchain: {:?}", blockchain);
+                    Ok(HttpResponse::Created().json(ResponseData {
+                        title: String::from("Actix Blockchain API - Success"),
+                        statuscode: 201,
+                        page: String::from("Add Transaction"),
+                        description: format!("Transactions: Transaction is queued for next block"),
+                    }))
+                }
+                Err(e) => {
+                    //------------------------
+                    // Error Notfication
 
-            //------------------------
-            // Success Notfication
-
-            Ok(HttpResponse::Created().json(ResponseData {
-                title: String::from("Actix Blockchain API - Success"),
-                statuscode: 201,
-                page: String::from("Add Transaction"),
-                description: format!(
-                    "Block ({}): Transaction is queued for next block",
-                    next_index
-                ),
-            }))
+                    Ok(HttpResponse::InternalServerError().json(ResponseData {
+                        title: String::from("Actix Blockchain API - Error"),
+                        statuscode: 500,
+                        page: String::from("Add Transaction"),
+                        description: format!(
+                            "Transactions: Transaction could not be added! Message: {:?}",
+                            e
+                        ),
+                    }))
+                }
+            }
         }
         // Payload Parse failed
         Err(e) => {
@@ -166,14 +177,17 @@ pub async fn main() -> std::io::Result<()> {
     );
 
     let blockchain = web::Data::new(Mutex::new(Blockchain::new()));
+    let transactions = web::Data::new(MutexTransactionList::new());
 
-    //Clone the Blockchain for the Mining Worker
+    //Clone the Blockchain and the Transaction Vector for the Mining Worker
     let worker_blockchain = blockchain.clone();
+    let worker_transactions = transactions.clone();
 
     //Create 2 Mining Worker Instances
     let miner = SyncArbiter::start(config.miner_count as usize, move || {
-        // Each Worker needs a copy of the reference to the Blockchain Data
-        MiningWorker::with_data(worker_blockchain.clone())
+        // Each Worker needs a copy of the reference to the Blockchain Data and
+        // the Transaction Vector
+        MiningWorker::with_data(worker_blockchain.clone(), worker_transactions.clone())
     });
     //Create 1 Mining Link Object
     let link = MinerLink::new(miner);
@@ -184,6 +198,7 @@ pub async fn main() -> std::io::Result<()> {
 
         App::new()
             .app_data(blockchain.clone())
+            .app_data(transactions.clone())
             .app_data(link_data)
             .app_data(web::JsonConfig::default().limit(MAX_SIZE)) // <- limit size of the payload (global configuration)
             .service(
@@ -203,6 +218,7 @@ pub async fn main() -> std::io::Result<()> {
                                 .route(web::get().to(dispatch_ping_request)),
                         )
             */
+            // Make the configuration structure also available within the Application
             .app_data(app_config)
             .wrap(Logger::default())
     })

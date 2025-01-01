@@ -1,7 +1,11 @@
+[![Automated Actix Tests](https://github.com/bodo-hugo-barwich/actix-blockchain/actions/workflows/testing.yml/badge.svg)](https://github.com/bodo-hugo-barwich/actix-blockchain/actions/workflows/testing.yml)
 
 # NAME
 
-Blockchain Exercise demonstrating the _Proof of Work_ concept
+Blockchain Exercise demonstrating the _Proof of Work_ concept.
+
+This simulates a **Cryptocurrency Node** in simplified version as to limit the scope 
+of the project.
 
 # DESCRIPTION
 
@@ -15,7 +19,7 @@ elegance and speed to a crypto-currency.
 # MOTIVATION
 
 Translating the concepts seen in the blockchain course
-[Blockchain and Smart Contract Introduction](https://www.udemy.com/certificate/UC-75023750-2591-42ce-aeed-c5519c9d7cbd/)
+[Blockchain and Smart Contracts](https://www.udemy.com/certificate/UC-75023750-2591-42ce-aeed-c5519c9d7cbd/)
 in a _Rust_ implementation as a small auto-sufficient Web Application.
 
 # REQUIREMENTS
