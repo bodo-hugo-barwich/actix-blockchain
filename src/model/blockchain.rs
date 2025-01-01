@@ -184,13 +184,14 @@ impl Blockchain {
         next_index
     }
 
-    /*    Protocolo de concenso Proof of Work (PoW).
-          Arguments:
-            - previous_proof: Nounce del bloque previo.
-
-          Returns:
-            - new_proof: Devolución del nuevo nounce obtenido con PoW.
-    */
+    /// Proof of Work (PoW) Consensus Protocol.
+    ///
+    /// # Parameters:
+    /// - `transaction_mutex`: List of `Transaction`s to be included in the Block.
+    ///
+    /// # Returns:
+    /// - `new_proof`: The nonce calculated through the PoW.
+    ///
     pub fn proof_of_work(&mut self, transaction_mutex: &web::Data<MutexTransactionList>) -> u64 {
         let last_block = self.get_last_block();
         let last_hash = match last_block {

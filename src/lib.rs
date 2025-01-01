@@ -218,6 +218,7 @@ pub async fn main() -> std::io::Result<()> {
                                 .route(web::get().to(dispatch_ping_request)),
                         )
             */
+            // Make the configuration structure also available within the Application
             .app_data(app_config)
             .wrap(Logger::default())
     })

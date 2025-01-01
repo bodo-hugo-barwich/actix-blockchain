@@ -33,7 +33,7 @@ pub struct MutexTransactionList {
 }
 
 /// Structure for Email Sending Errors
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct TransactionMutexError {
     status: String,
     report: String,
@@ -59,7 +59,7 @@ impl Transaction {
     ///
     /// Create a `Transaction` for the Mining Reward
     /// ```
-    ///    use model::transaction::Transaction;
+    ///    use blockchain_api::model::transaction::Transaction;
     ///
     ///    let reward = Transaction::from_data("Blockchain".to_owned(), "Miner".to_owned(), 10f64);
     /// ```
@@ -204,4 +204,122 @@ impl MutexTransactionList {
             }
         }
     }
+}
+
+//==============================================================================
+// Unit Tests
+
+/*
+Recreating the Test Data:
+
+    $ curl -v http://localhost:3100/add_transaction -d '{"sender":"sender1","receiver":"receiver1","amount":5.67}' | jq '.'
+
+*/
+
+#[test]
+fn transaction_list_from_vec() {
+    //-------------------------------------
+    // Create a `MutexTransactionList` from a Vector
+
+    let mut transactions = Vec::<Transaction>::with_capacity(3);
+
+    transactions.push(Transaction {
+        sender: "sender1".to_owned(),
+        receiver: "receiver1".to_owned(),
+        amount: 5.67f64,
+    });
+    transactions.push(Transaction {
+        sender: "sender2".to_owned(),
+        receiver: "receiver2".to_owned(),
+        amount: 7.89107f64,
+    });
+    transactions.push(Transaction {
+        sender: "sender3".to_owned(),
+        receiver: "receiver3".to_owned(),
+        amount: 9.101113f64,
+    });
+
+    let transaction_count = transactions.len();
+
+    assert_eq!(transaction_count, 3);
+
+    let transaction_mutex = MutexTransactionList::from_vec(transactions);
+
+    let transaction_count = transaction_mutex.get_count();
+
+    assert_eq!(transaction_count, 3);
+}
+
+#[test]
+fn add_transaction_from_data() {
+    //-------------------------------------
+    // Create a `Transaction` from a data set
+    // Transaction List does not need to be `mut` because it is a `Mutex`
+
+    let transaction_mutex = MutexTransactionList::new();
+
+    let transaction_count = transaction_mutex.get_count();
+
+    assert_eq!(transaction_count, 0);
+
+    let result = transaction_mutex.add_transaction_from_data("sender1", "receiver1", 5.67);
+
+    assert_eq!(result.err(), None);
+
+    let result = transaction_mutex.add_transaction_from_data("sender2", "receiver2", 7.89107);
+
+    assert_eq!(result.err(), None);
+
+    let result = transaction_mutex.add_transaction_from_data("sender3", "receiver3", 9.101113);
+
+    assert_eq!(result.err(), None);
+
+    let transaction_count = transaction_mutex.get_count();
+
+    assert_eq!(transaction_count, 3);
+
+    let transactions = transaction_mutex.into_vec();
+
+    assert_eq!(transactions.len(), 3);
+
+    let transaction_count = transaction_mutex.get_count();
+
+    assert_eq!(transaction_count, 0);
+}
+
+#[test]
+fn add_transaction_as_structure() {
+    //-------------------------------------
+    // Create a Transaction from a pre-built structure
+    // Transaction List does not need to be `mut` because it is a `Mutex`
+
+    let transaction_mutex = MutexTransactionList::new();
+
+    let result = transaction_mutex.add_transaction(Transaction {
+        sender: "sender1".to_owned(),
+        receiver: "receiver1".to_owned(),
+        amount: 5.67f64,
+    });
+
+    assert_eq!(result.err(), None);
+
+    let result = transaction_mutex.add_transaction(Transaction {
+        sender: "sender2".to_owned(),
+        receiver: "receiver2".to_owned(),
+        amount: 7.89107f64,
+    });
+
+    assert_eq!(result.err(), None);
+
+    let result = transaction_mutex.add_transaction(Transaction {
+        sender: "sender3".to_owned(),
+        receiver: "receiver3".to_owned(),
+        amount: 9.101113f64,
+    });
+
+    assert_eq!(result.err(), None);
+
+    let transaction_count = transaction_mutex.get_count();
+
+    assert_eq!(transaction_count, 3);
 }
